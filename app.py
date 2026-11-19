@@ -16,6 +16,9 @@ from src.expense_manager import (
     update_expense,
     delete_expense
 )
+from src.database import initialize_database
+
+initialize_database()
 
 # Page Configuration
 st.set_page_config(
