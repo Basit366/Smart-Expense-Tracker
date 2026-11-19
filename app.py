@@ -1,9 +1,9 @@
-
 import io
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 
+from src.auth_ui import show_auth_page, show_logout_button
 from src.analytics import (
     get_expense_dataframe,
     get_total_expenses,
@@ -26,6 +26,12 @@ st.set_page_config(
     page_icon="💰",
     layout="wide"
 )
+# Authentication Protection
+if "user" not in st.session_state:
+    show_auth_page()
+    st.stop()
+
+show_logout_button()
 
 
 # Sidebar Navigation
@@ -1215,7 +1221,7 @@ elif page == "Budget Management":
 
         if save_budget:
 
-            month_key = selected_month.strftime("%Y-%m")
+            month_key = selected_month.strftime("%Y-%m-01")
 
             set_budget(month_key, budget_amount)
 
@@ -1227,7 +1233,7 @@ elif page == "Budget Management":
     # Current Month Budget
     st.subheader("📊 Current Month Budget")
 
-    monthly_budget = get_budget(current_month)
+    monthly_budget = get_budget(f"{current_month}-01")
 
     current_month_expenses = df[
         df["expense_date"].dt.strftime("%Y-%m") == current_month

@@ -1,12 +1,24 @@
 
-from src.database import get_connection
+from src.supabase_client import get_supabase_client
+import streamlit as st
+
+
+def get_current_user_id():
+    """Get the authenticated user's ID."""
+
+    user = st.session_state.get("user")
+
+    if user is None:
+        raise PermissionError("Please log in first.")
+
+    return user.id
 
 
 def add_expense(
     title, amount, category, expense_date,
     description="", payment_method="Cash"
 ):
-    """Add a new expense to the database."""
+    """Add an expense for the logged-in user."""
 
     if not title or not title.strip():
         raise ValueError("Expense title cannot be empty.")
@@ -20,43 +32,45 @@ def add_expense(
     if not expense_date:
         raise ValueError("Expense date is required.")
 
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO expenses
-            (title, amount, category, expense_date,
-             description, payment_method)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                title.strip(),
-                amount,
-                category.strip(),
-                expense_date,
-                description.strip(),
-                payment_method.strip()
-            )
-        )
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        return cursor.lastrowid
+    response = supabase.table("expenses").insert({
+        "user_id": user_id,
+        "title": title.strip(),
+        "amount": amount,
+        "category": category.strip(),
+        "expense_date": str(expense_date),
+        "description": description.strip(),
+        "payment_method": payment_method.strip()
+    }).execute()
+
+    return response.data[0]["id"]
 
 
 def get_all_expenses():
-    """Retrieve all expenses from the database."""
+    """Retrieve only the logged-in user's expenses."""
 
-    with get_connection() as connection:
-        cursor = connection.execute(
-            "SELECT * FROM expenses ORDER BY expense_date DESC, id DESC"
-        )
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        return [dict(row) for row in cursor.fetchall()]
+    response = (
+        supabase.table("expenses")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("expense_date", desc=True)
+        .order("id", desc=True)
+        .execute()
+    )
+
+    return response.data
 
 
 def update_expense(
     expense_id, title, amount, category,
     expense_date, description="", payment_method="Cash"
 ):
-    """Update an existing expense."""
+    """Update an expense belonging to the logged-in user."""
 
     if not title or not title.strip():
         raise ValueError("Expense title cannot be empty.")
@@ -70,36 +84,41 @@ def update_expense(
     if not expense_date:
         raise ValueError("Expense date is required.")
 
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            UPDATE expenses
-            SET title = ?, amount = ?, category = ?,
-                expense_date = ?, description = ?,
-                payment_method = ?
-            WHERE id = ?
-            """,
-            (
-                title.strip(),
-                amount,
-                category.strip(),
-                expense_date,
-                description.strip(),
-                payment_method.strip(),
-                expense_id
-            )
-        )
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        return cursor.rowcount > 0
+    response = (
+        supabase.table("expenses")
+        .update({
+            "title": title.strip(),
+            "amount": amount,
+            "category": category.strip(),
+            "expense_date": str(expense_date),
+            "description": description.strip(),
+            "payment_method": payment_method.strip()
+        })
+        .eq("id", expense_id)
+        .eq("user_id", user_id)
+        .select("id")
+        .execute()
+    )
+
+    return len(response.data) > 0
 
 
 def delete_expense(expense_id):
-    """Delete an expense using its ID."""
+    """Delete an expense belonging to the logged-in user."""
 
-    with get_connection() as connection:
-        cursor = connection.execute(
-            "DELETE FROM expenses WHERE id = ?",
-            (expense_id,)
-        )
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        return cursor.rowcount > 0
+    response = (
+        supabase.table("expenses")
+        .delete()
+        .eq("id", expense_id)
+        .eq("user_id", user_id)
+        .select("id")
+        .execute()
+    )
+
+    return len(response.data) > 0

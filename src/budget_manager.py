@@ -1,64 +1,85 @@
 
-from src.database import get_connection
+import streamlit as st
+from src.supabase_client import get_supabase_client
+from src.expense_manager import get_current_user_id
 
 
 def set_budget(month, amount):
-    """Add or update a monthly budget."""
+    """Add or update the logged-in user's monthly budget."""
 
-    with get_connection() as connection:
+    if amount <= 0:
+        raise ValueError("Budget amount must be greater than zero.")
 
-        connection.execute(
-            """
-            INSERT INTO budgets (month, amount)
-            VALUES (?, ?)
-            ON CONFLICT(month)
-            DO UPDATE SET amount = excluded.amount
-            """,
-            (month, amount)
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("budgets")
+        .upsert(
+            {
+                "user_id": user_id,
+                "category": "Overall",
+                "month": str(month),
+                "amount": amount
+            },
+            on_conflict="user_id,category,month"
         )
-
-        connection.commit()
+        .execute()
+    )
 
     return True
 
 
 def get_budget(month):
-    """Get budget for a specific month."""
+    """Get the logged-in user's budget for a specific month."""
 
-    with get_connection() as connection:
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        cursor = connection.execute(
-            "SELECT amount FROM budgets WHERE month = ?",
-            (month,)
-        )
+    response = (
+        supabase.table("budgets")
+        .select("amount")
+        .eq("user_id", user_id)
+        .eq("category", "Overall")
+        .eq("month", str(month))
+        .execute()
+    )
 
-        result = cursor.fetchone()
-
-        return float(result["amount"]) if result else 0.0
+    return float(response.data[0]["amount"]) if response.data else 0.0
 
 
 def get_all_budgets():
-    """Get all monthly budgets."""
+    """Get all monthly budgets belonging to the logged-in user."""
 
-    with get_connection() as connection:
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        cursor = connection.execute(
-            "SELECT * FROM budgets ORDER BY month DESC"
-        )
+    response = (
+        supabase.table("budgets")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("category", "Overall")
+        .order("month", desc=True)
+        .execute()
+    )
 
-        return [dict(row) for row in cursor.fetchall()]
+    return response.data
 
 
 def delete_budget(month):
-    """Delete a monthly budget."""
+    """Delete the logged-in user's monthly budget."""
 
-    with get_connection() as connection:
+    user_id = get_current_user_id()
+    supabase = get_supabase_client()
 
-        cursor = connection.execute(
-            "DELETE FROM budgets WHERE month = ?",
-            (month,)
-        )
+    response = (
+        supabase.table("budgets")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("category", "Overall")
+        .eq("month", str(month))
+        .select("id")
+        .execute()
+    )
 
-        connection.commit()
-
-        return cursor.rowcount > 0
+    return len(response.data) > 0
